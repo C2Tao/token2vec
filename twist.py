@@ -1,16 +1,15 @@
-from keras.layers import merge, Reshape, TimeDistributed, Lambda, Cropping1D, Input, Dense, Convolution2D, MaxPooling2D, UpSampling2D
+from keras.layers import merge, Reshape, TimeDistributed, Lambda, Cropping1D, Input, Dense, Convolution2D, MaxPooling2D, UpSampling2D, Layer
 from keras.models import Model
 from keras.objectives import categorical_crossentropy, binary_crossentropy
 from keras import backend as K
 # theano weight indexing: (n_input), n_row, n_col, n_output
 # theano tensor indexing: (n_batch), n_row, n_col, n_channel
 # my order n_batch, n_time, n_feat_sub, n_feat 
-n_win = 2
 
 def pad_zero(x, n_top=0, n_bot=0):
     return K.asymmetric_temporal_padding(x, left_pad = n_top, right_pad = n_bot)
 
-def context(x, n_win=2):
+def context(x, n_win):
     w_list = list(reversed(range(2*n_win+1)))
     w_list.pop(n_win)
     x = K.concatenate([pad_zero(x, n_top = 2*n_win - w, n_bot = w) for w in w_list], axis=-1)
@@ -24,6 +23,7 @@ def dummy_target(x):
 
 
 def obj_trans(inputs):
+    from keras.objectives import categorical_crossentropy, binary_crossentropy
     y_answ, y_pred = inputs
     return K.mean(categorical_crossentropy(y_answ, y_pred), axis=-1)
 
@@ -39,9 +39,31 @@ def shape_final(input_shapes):
     assert len(input_shapes)==2
     return input_shapes[0][0], 1
 
-def shape_context(input_shapes):
+def shape_context(input_shapes, n_win):
     post_shape = input_shapes
     return post_shape[0], post_shape[1], post_shape[2]*n_win*2
+
+
+class MyLayer(Layer):
+    def __init__(self, n_win, **kwargs):
+        self.n_win = n_win
+        super(MyLayer, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        super(MyLayer, self).build(input_shape)
+
+    def call(self, x, mask=None):
+        return context(x, self.n_win)
+
+    def get_output_shape_for(self, input_shape):
+        return shape_context(input_shape, self.n_win)
+    
+    def get_config(self):
+        config = {'n_win': self.n_win}
+        base_config = super(MyLayer, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+
 #####################################################
 input_img = Input(shape=(28, 28, 1))
 # at this point the representation is (28, 28, 1)
@@ -68,17 +90,13 @@ p = TimeDistributed(Dense(8, activation='softmax'), name = 'posterior')(x)
 # at this point the representation is (4, 8)
 
 
-c = Lambda(context, shape_context)(p) 
+#c = Lambda(context, shape_context, {'n_win':2})(p) 
+c = MyLayer(2)(p)
 #c = context(p, 2)
 c = TimeDistributed(Dense(8, activation = 'softmax'), name = 'predicted')(c)
 
 
-print 'c',c
-print 'p',p
 err_trans  = merge([p,c], mode=obj_trans, output_shape =  shape_final)
-print 'out',err_trans
-#error1 = categorical_crossentropy(p, c)
-#error1 = K.sum(error1, axis=-1)
 
 x = TimeDistributed(Dense(28*8*8, activation='tanh'))(x)
 # at this point the representation is (4, 28*8*8)
@@ -111,16 +129,6 @@ err_recon = merge([input_img, decoded], mode=obj_recon, output_shape = shape_fin
 err_final = merge([err_trans, err_recon], mode=obj_final, output_shape = shape_final, name = 'finalxxx')
 print err_recon, err_trans
 output = err_final
-#output = Lambda(lambda x:x, output_shape = lambda in_shape:in_shape, name='final')(err_final) 
-#error2 = binary_crossentropy(input_img, decoded)
-#error2 = K.sum(error2, axis=-1)
-#error2 = K.sum(error2, axis=-1)
-#print error1
-#print error2
-#errors = Merge([error1, error2], mode='concat', concat_axis=-1)
-#error = Lambda(lambda x,y: x+y)(errors)
-#error = error1+error2
-#print error
 
 tokenizer = Model(input_img, output)
 tokenizer.compile(optimizer='adadelta', loss=dummy_objective)
@@ -136,14 +144,14 @@ import numpy as np
 
 (x_train, _), (x_test, _) = mnist.load_data()
 
-nb_epoch = 2 #50
+nb_epoch = 1 #50
 
 x_train = x_train.astype('float32') / 255.
 x_test = x_test.astype('float32') / 255.
+#x_train = np.reshape(x_train, (len(x_train), 28, 28, 1))[:50,:,:,:]
 x_train = np.reshape(x_train, (len(x_train), 28, 28, 1))
 x_test = np.reshape(x_test, (len(x_test), 28, 28, 1))
-dumb = np.zeros(len(x_train))
-#autoencoder.fit(x_train, x_train,
+
 tokenizer.fit(x_train, dummy_target(x_train),
                 nb_epoch=nb_epoch,
                 batch_size=128,
@@ -152,15 +160,16 @@ tokenizer.fit(x_train, dummy_target(x_train),
                 callbacks=[])
 #####################################################3
 from keras.models import load_model
-#tokenizer.save('tokenizer.h5')
+tokenizer.save('tokenizer.h5')
 autoencoder.save('my_model.h5')  # creates a HDF5 file 'my_model.h5'
 encoder.save('encoder.h5')  # creates a HDF5 file 'my_model.h5'
+del tokenizer
 del autoencoder  # deletes the existing model
 del encoder  # deletes the existing model
 
 # returns a compiled model
 # identical to the previous one
-#tokenizer = load_model('tokenizer.h5')
+tokenizer = load_model('tokenizer.h5', custom_objects = {'MyLayer':MyLayer,'dummy_objective':dummy_objective})
 autoencoder = load_model('my_model.h5')
 encoder = load_model('encoder.h5')
 #####################################################3

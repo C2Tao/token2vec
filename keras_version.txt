@@ -1,0 +1,10 @@
+commit a6c9227372c607fc356b14e17c230cb9c1d5f589
+Author: Gijs van Tulder <gvtulder@users.noreply.github.com>
+Date:   Thu Jan 5 12:13:43 2017 +0100
+
+    Fix problem with old Theano batch normalization and GPU (#4917)
+
+    * Fix problem with old Theano batch normalization and GPU (see #4881).
+
+    * Fix test.
+
