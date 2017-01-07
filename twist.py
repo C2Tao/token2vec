@@ -1,26 +1,16 @@
 from keras.layers import merge, Reshape, TimeDistributed, Lambda, Cropping1D, Input, Dense, Convolution2D, MaxPooling2D, UpSampling2D, Layer
 from keras.models import Model
-from keras.objectives import categorical_crossentropy, binary_crossentropy
 from keras import backend as K
 # theano weight indexing: (n_input), n_row, n_col, n_output
 # theano tensor indexing: (n_batch), n_row, n_col, n_channel
 # my order n_batch, n_time, n_feat_sub, n_feat 
 
-def pad_zero(x, n_top=0, n_bot=0):
-    return K.asymmetric_temporal_padding(x, left_pad = n_top, right_pad = n_bot)
-
-def context(x, n_win):
-    w_list = list(reversed(range(2*n_win+1)))
-    w_list.pop(n_win)
-    x = K.concatenate([pad_zero(x, n_top = 2*n_win - w, n_bot = w) for w in w_list], axis=-1)
-    return Cropping1D(cropping=((n_win, n_win)))(x)
 
 def dummy_objective(dummy_target, obj):
     return obj
 
 def dummy_target(x):
     return np.zeros(len(x))
-
 
 def obj_trans(inputs):
     from keras.objectives import categorical_crossentropy, binary_crossentropy
@@ -39,29 +29,57 @@ def shape_final(input_shapes):
     assert len(input_shapes)==2
     return input_shapes[0][0], 1
 
-def shape_context(input_shapes, n_win):
-    post_shape = input_shapes
-    return post_shape[0], post_shape[1], post_shape[2]*n_win*2
 
+class Context(Layer):
+    '''
+    basic requirement for a custom layer:
+    define 5 functions:
+    [__init__, build, call, get_output_shape_for, get_config]
 
-class MyLayer(Layer):
-    def __init__(self, n_win, **kwargs):
-        self.n_win = n_win
-        super(MyLayer, self).__init__(**kwargs)
+    def __init__(self, [INSERT ARGS HERE], **kwargs): 
+        #define your own parameters, end with
+        super(Context, self).__init__(**kwargs)
 
-    def build(self, input_shape):
-        super(MyLayer, self).build(input_shape)
+    def build(self, input_shape): 
+        #define the layer parameters, end with
+        super(Context, self).build(input_shape)
 
     def call(self, x, mask=None):
-        return context(x, self.n_win)
+        #calculations happen here
+
+    def get_output_shape_for(self, input_shape): 
+        #same as Lambda layer output size function
+
+    def get_config(self): 
+        #add all parameters used in init to config
+    '''
+
+    def __init__(self, n_win, **kwargs):
+        self.n_win = n_win
+        super(Context, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        super(Context, self).build(input_shape)
+
+    def call(self, x, mask=None):
+        return self._context(x, self.n_win)
 
     def get_output_shape_for(self, input_shape):
-        return shape_context(input_shape, self.n_win)
+        return input_shape[0], input_shape[1], input_shape[2]*self.n_win*2
     
     def get_config(self):
         config = {'n_win': self.n_win}
-        base_config = super(MyLayer, self).get_config()
+        base_config = super(Context, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
+    
+    def _pad_zero(self, x, n_left=0, n_right=0):
+        return K.asymmetric_temporal_padding(x, left_pad = n_left, right_pad = n_right)
+
+    def _context(self, x, n_win):
+        w_list = list(reversed(range(2*n_win+1)))
+        w_list.pop(n_win)
+        x = K.concatenate([self._pad_zero(x, n_left = 2*n_win - w, n_right = w) for w in w_list], axis=-1)
+        return Cropping1D(cropping=((n_win, n_win)))(x)
 
 
 #####################################################
@@ -91,8 +109,7 @@ p = TimeDistributed(Dense(8, activation='softmax'), name = 'posterior')(x)
 
 
 #c = Lambda(context, shape_context, {'n_win':2})(p) 
-c = MyLayer(2)(p)
-#c = context(p, 2)
+c = Context(3)(p)
 c = TimeDistributed(Dense(8, activation = 'softmax'), name = 'predicted')(c)
 
 
@@ -124,13 +141,10 @@ x = Convolution2D(16, 5, 1, activation='relu', border_mode = 'valid' )(x)
 
 # at this point the representation is (28, 28, 16)
 decoded = Convolution2D(1, 3, 3, activation='sigmoid', border_mode='same', name = 'reconstructed')(x)
-print decoded
 err_recon = merge([input_img, decoded], mode=obj_recon, output_shape = shape_final, name = 'recon')
-err_final = merge([err_trans, err_recon], mode=obj_final, output_shape = shape_final, name = 'finalxxx')
-print err_recon, err_trans
-output = err_final
+err_final = merge([err_trans, err_recon], mode=obj_final, output_shape = shape_final, name = 'final')
 
-tokenizer = Model(input_img, output)
+tokenizer = Model(input_img, err_final)
 tokenizer.compile(optimizer='adadelta', loss=dummy_objective)
 
 autoencoder = Model(input_img, decoded)
@@ -169,7 +183,7 @@ del encoder  # deletes the existing model
 
 # returns a compiled model
 # identical to the previous one
-tokenizer = load_model('tokenizer.h5', custom_objects = {'MyLayer':MyLayer,'dummy_objective':dummy_objective})
+tokenizer = load_model('tokenizer.h5', custom_objects = {'Context':Context,'dummy_objective':dummy_objective})
 autoencoder = load_model('my_model.h5')
 encoder = load_model('encoder.h5')
 #####################################################3
