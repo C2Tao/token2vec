@@ -2,25 +2,11 @@ from keras.layers import merge, Reshape, TimeDistributed, Lambda, Cropping1D, In
 from keras.models import Model
 from keras.models import load_model
 from keras import backend as K
-from keras.regularizers import l1
 # theano weight indexing: (n_input), n_row, n_col, n_output
 # theano tensor indexing: (n_batch), n_row, n_col, n_channel
 # my order n_batch, n_time, n_feat_sub, n_feat 
 
 
-#####################################################3
-from keras.datasets import mnist
-import numpy as np
-
-(x_train, _), (x_test, _) = mnist.load_data()
-
-x_train = x_train.astype('float32') / 255.
-x_test = x_test.astype('float32') / 255.
-#x_train = np.reshape(x_train, (len(x_train), 28, 28, 1))[:50,:,:,:]
-x_train = np.reshape(x_train, (len(x_train), 28, 28, 1))
-x_test = np.reshape(x_test, (len(x_test), 28, 28, 1))[:50,:,:,:]
-
-#####################################################3
 def dummy_objective(dummy_target, obj):
     return obj
 
@@ -37,8 +23,8 @@ def obj_recon(inputs):
     return K.mean(K.mean(K.mean(K.square(y_answ - y_pred), axis=-1), axis=-1),axis=-1)
 
 def obj_final(inputs):
-    trans_err, recon_err = inputs
-    return trans_err*0.01+recon_err*1
+    obj1, obj2 = inputs
+    return obj1+obj2
 
 def shape_final(input_shapes):
     assert len(input_shapes)==2
@@ -98,19 +84,7 @@ class Context(Layer):
 
 
 #####################################################
-'''
-tokenizer = load_model('tokenizer_.h5', custom_objects = {'Context':Context,'dummy_objective':dummy_objective})
-input_img = tokenizer.get_layer("input").input
-err_trans = tokenizer.get_layer("err_recon").output
-err_recon = tokenizer.get_layer("err_trans").output
-err_final = merge([err_trans, err_recon], mode=obj_final, output_shape = shape_final, name = 'err_final')
-new_tokenizer = Model(input_img, err_final)
-new_tokenizer.compile(optimizer='adam', loss=dummy_objective)
-'''
-#####################################################3
-'''
-'''
-input_img = Input(shape=(28, 28, 1), name='input')
+input_img = Input(shape=(28, 28, 1))
 # at this point the representation is (28, 28, 1)
 x = Convolution2D(16, 3, 3, activation='relu', border_mode='same')(input_img)
 x = UpSampling2D((1, 2))(x)
@@ -121,66 +95,100 @@ x = Convolution2D(8, 3, 3, activation='relu', border_mode='same')(x)
 x = UpSampling2D((1, 2))(x)
 x = MaxPooling2D((2, 1), border_mode='same')(x)
 
-
 # at this point the representation is (7, 28*4, 8)
-x = Reshape((7, 28*4*8))(x)
-# at this point the representation is (7, 28*4*8)
-print x
-p = TimeDistributed(Dense(100, activation='softmax',W_regularizer=l1(0.01)), name = 'posterior')(x)
-print p
-# at this point the representation is (7, 100)
+x = Convolution2D(8, 3, 3, activation='relu', border_mode='same')(x)
+x = UpSampling2D((1, 2))(x)
+x = MaxPooling2D((2, 1), border_mode='same')(x)#encoded
+encoded = x
+
+
+# at this point the representation is (4, 28*8, 8)
+x = Reshape((4, 28*8*8))(x)
+# at this point the representation is (4, 28*8*8)
+p = TimeDistributed(Dense(100, activation='softmax'), name = 'posterior')(x)
+# at this point the representation is (4, 8)
+
 
 c = Context(1)(p)
 c = TimeDistributed(Dense(100, activation = 'softmax'), name = 'predicted')(c)
-err_trans  = merge([p,c], mode=obj_trans, output_shape =  shape_final, name = 'err_trans')
-
-x = TimeDistributed(Dense(28*4*8, activation='tanh'))(p)
-# at this point the representation is (7, 28*4*8)
-x = Reshape((7, 28*4, 8))(x)
+err_trans  = merge([p,c], mode=obj_trans, output_shape =  shape_final)
 
 
-# at this point the representation is (7, 28*4, 8)
+
+x = TimeDistributed(Dense(28*8*8, activation='tanh'))(p)
+# at this point the representation is (4, 28*8*8)
+x = Reshape((4, 28*8, 8))(x)
+
+
+# at this point the representation is (4, 28*8, 8)
 x = Convolution2D(8, 3, 3, activation='relu', border_mode='same')(x)
 x = UpSampling2D((2, 1))(x)
 x = MaxPooling2D((1, 2), border_mode='same')(x)
 
-# at this point the representation is (14, 28*2, 8)
+# at this point the representation is (8, 28*4, 8)
+x = Convolution2D(8, 3, 3, activation='relu', border_mode='same')(x)
+x = UpSampling2D((2, 1))(x)
+x = MaxPooling2D((1, 2), border_mode='same')(x)
+
+# at this point the representation is (16, 28*2, 8)
 x = Convolution2D(16, 3, 3, activation='relu', border_mode='same')(x)
 x = UpSampling2D((2, 1))(x)
 x = MaxPooling2D((1, 2), border_mode='same')(x)
 
+# at this point the representation is (32, 28, 16)
+x = Convolution2D(16, 5, 1, activation='relu', border_mode = 'valid' )(x)
+#context = Lambda(context)((x,2))
+
 # at this point the representation is (28, 28, 16)
 decoded = Convolution2D(1, 3, 3, activation='sigmoid', border_mode='same', name = 'reconstructed')(x)
-err_recon = merge([input_img, decoded], mode=obj_recon, output_shape = shape_final, name = 'err_recon')
-err_final = merge([err_trans, err_recon], mode=obj_final, output_shape = shape_final, name = 'err_final')
+err_recon = merge([input_img, decoded], mode=obj_recon, output_shape = shape_final, name = 'recon')
+err_final = merge([err_trans, err_recon], mode=obj_final, output_shape = shape_final, name = 'final')
 
 tokenizer = Model(input_img, err_final)
-tokenizer.compile(optimizer='adam', loss=dummy_objective)
+tokenizer.compile(optimizer='adadelta', loss=dummy_objective)
 autoencoder = Model(input_img, decoded)
 posterior = Model(input_img, p)
 recon_err = Model(input_img, err_recon)
 trans_err = Model(input_img, err_trans)
 
 
-#####################################################
-tokenizer = load_model('tokenizer.h5', custom_objects = {'Context':Context,'dummy_objective':dummy_objective})
-#####################################################
+#####################################################3
+from keras.datasets import mnist
+import numpy as np
+
+(x_train, _), (x_test, _) = mnist.load_data()
+
+nb_epoch = 5 #50
+
+x_train = x_train.astype('float32') / 255.
+x_test = x_test.astype('float32') / 255.
+#x_train = np.reshape(x_train, (len(x_train), 28, 28, 1))[:50,:,:,:]
+x_train = np.reshape(x_train, (len(x_train), 28, 28, 1))
+x_test = np.reshape(x_test, (len(x_test), 28, 28, 1))[:50,:,:,:]
+#####################################################3
+'''
 tokenizer.fit(x_train, dummy_target(x_train),
-                nb_epoch=5,
+                nb_epoch=nb_epoch,
                 batch_size=128,
                 shuffle=True,
                 validation_data=(x_test, dummy_target(x_test)),
                 callbacks=[])
 tokenizer.save('tokenizer.h5')
-#####################################################
+autoencoder.save('autoencoder.h5')
+posterior.save('posterior.h5')
+'''
+#recon_error.save('recon.h5')
+#trans_error.save('trans.h5')
+#####################################################3
+# returns a compiled model
+# identical to the previous one
+tokenizer = load_model('tokenizer.h5', custom_objects = {'Context':Context,'dummy_objective':dummy_objective})
+autoencoder = load_model('autoencoder.h5', custom_objects = {'Context':Context,'dummy_objective':dummy_objective})
+posterior = load_model('posterior.h5', custom_objects = {'Context':Context,'dummy_objective':dummy_objective})
 
-input_img = tokenizer.get_layer("input").input
-autoencoder = Model(input_img, tokenizer.get_layer("reconstructed").output)
-posterior = Model(input_img, tokenizer.get_layer("posterior").output)
-recon_err = Model(input_img, tokenizer.get_layer("err_recon").output)
-trans_err = Model(input_img, tokenizer.get_layer("err_trans").output)
-
-
+#####################################################3
+print recon_err(x_test)[:10]
+print trans_err(x_test)[:10]
 import matplotlib.pyplot as plt
 decoded_imgs = autoencoder.predict(x_test)
 
@@ -205,7 +213,4 @@ plt.show()
 plt.matshow(posterior.predict(x_test)[:10].reshape(-1,100))
 plt.show()
 
-rer = recon_err.predict(x_test)
-ter = trans_err.predict(x_test)
-print rer, ter
 
