@@ -38,7 +38,7 @@ def obj_trans(inputs):
     tot_entro = K.mean(-tot_prob*K.log(tot_prob+ep), axis=-1)
     ind_entro = K.mean(K.mean(-y_answ*K.log(y_answ+ep), axis=-1), axis=-1)
     
-    return 0*trans+1*(-tot_entro)+1*(ind_entro)
+    return 0.001*trans+1*(-tot_entro)+1*(ind_entro)
 
 def obj_recon(inputs):
     y_answ, y_pred = inputs
@@ -182,7 +182,7 @@ tokenizer.compile(optimizer='adam', loss=dummy_objective)
 #tokenizer = load_model('tokenizer.h5', custom_objects = {'Context':Context,'dummy_objective':dummy_objective})
 ####################################################
 tokenizer.fit(x_train, dummy_target(x_train),
-                nb_epoch=10,
+                nb_epoch=100,
                 batch_size=128,
                 shuffle=True,
                 validation_data=(x_test, dummy_target(x_test)),
@@ -218,7 +218,7 @@ for i in range(1, n+1):
     ax.get_yaxis().set_visible(False)
 plt.show()
 #####################################################3
-plt.matshow(posterior.predict(x_test)[:10].reshape(-1,n_post))
+plt.matshow(posterior.predict(x_test)[:1].reshape(-1,n_post*1))
 plt.show()
 
 rer = recon_err.predict(x_test)
