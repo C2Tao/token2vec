@@ -115,6 +115,7 @@ class Context(Layer):
 
 
 #####################################################3
+'''
 input_img = Input(shape=(28*n_seq, 28, 1), name='input')
 
 x = input_img
@@ -178,9 +179,7 @@ err_final = merge([err_trans, err_recon], mode=obj_final, output_shape = shape_f
 
 tokenizer = Model(input_img, err_final)
 tokenizer.compile(optimizer='adam', loss=dummy_objective)
-#####################################################
-#tokenizer = load_model('tokenizer.h5', custom_objects = {'Context':Context,'dummy_objective':dummy_objective})
-####################################################
+
 tokenizer.fit(x_train, dummy_target(x_train),
                 nb_epoch=100,
                 batch_size=128,
@@ -188,7 +187,10 @@ tokenizer.fit(x_train, dummy_target(x_train),
                 validation_data=(x_test, dummy_target(x_test)),
                 callbacks=[])
 tokenizer.save('tokenizer.h5')
+'''
 #####################################################
+tokenizer = load_model('tokenizer.h5', custom_objects = {'Context':Context,'dummy_objective':dummy_objective})
+####################################################
 
 input_img = tokenizer.get_layer("input").input
 autoencoder = Model(input_img, tokenizer.get_layer("reconstructed").output)
@@ -218,7 +220,7 @@ for i in range(1, n+1):
     ax.get_yaxis().set_visible(False)
 plt.show()
 #####################################################3
-plt.matshow(posterior.predict(x_test)[:1].reshape(-1,n_post*1))
+plt.matshow(posterior.predict(x_test)[:10].reshape(-1,n_post*10))
 plt.show()
 
 rer = recon_err.predict(x_test)
