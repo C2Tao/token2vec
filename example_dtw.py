@@ -43,31 +43,35 @@ def pseudo_code_warp2(D):
         K[i] = min(M[i,:nD], M[i,1:])
     return M[1:, 1:]
 
-nD = np.array([[1,0,1,1,1,1],[1,1,0,1,1,1]])
+nD = np.array([[1,0,1,1,1,1],[1,1,0,1,1,1]],dtype=np.float32)
 print pseudo_code_warp(nD) 
 
 
-z = tf.zeros_initializer((1,5))
-
-def warp_sca(s_im1, s_i):
-    return s_im1+s_i
+def warp_ele(m_i, vecs):
+    m_t, m_tm1, v_i = vecs
+    print 'm_t',m_t
+    print 'm_tm1',m_tm1
+    print 'v_i',v_i
+    m_ip1 = tf.reduce_min(tf.pack([m_t, m_tm1, m_i]))+v_i
+    return m_ip1
 
 def warp_row(m_t, v_t):
-    #return v_tm1+v_t
-    vs = tf.unstack(v_t, axis=0)
-    zz = 0.0#np.inf
-    return m_t+tf.scan(warp_sca,v_t, initializer=zz)
+    v_s = [tf.constant(np.inf)] + tf.unstack(m_t, axis=0)[:-1]
+    m_tm1 = tf.pack(v_s)
+    print 'm_tm1',m_tm1
+    print 'm_t',m_t
+    print 'v_s',v_s
+    print 'v_t',v_t
+    m_tp1 = tf.scan(warp_ele,(m_t,m_tm1,v_t), initializer=np.inf)
+    return m_tp1
 
 
 
-print sess.run(z)
-print z.eval()
 print D.eval(feed_dict={x:nx, y:ny})
 
 
-warped = tf.scan(warp_row, D, initializer=z)
-#warped = tf.scan(warp_row, D)
-
+#warped = tf.scan(warp_row, D, initializer=tf.zeros_initializer((5)))
+warped = tf.scan(warp_row, nD, initializer=tf.zeros_initializer((6)))
 print sess.run(warped, feed_dict={x:nx, y:ny})
 
 ########################################################
