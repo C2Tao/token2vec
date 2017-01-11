@@ -75,13 +75,18 @@ def error_sharp(p):
     return err
 
 def error_trans(p, e):
-    e = Context(n_context)(e)
+    e = Context(n_context)(p)
     c = TimeDistributed(Dense(n_post, activation = 'softmax'), name = 'predicted')(e)
     err = merge([p,c], mode=obj_trans, output_shape =  dummy_shape, name = 'err_trans')
+    #e = Context(n_context)(e)
+    #c = TimeDistributed(Dense(n_post, activation = 'softmax'), name = 'predicted')(e)
+    #err = merge([p,c], mode=obj_trans, output_shape =  dummy_shape, name = 'err_trans')
     return err
 
-def layer_twist(x, mode='encoder', (nX, nT, nF, nC)=(2,3,3,8),name=None):
-    x = Convolution2D(nC, nT, nF, border_mode='same')(x)
+def layer_twist(x, mode='encoder', (nX, nT, nF, nC)=(2,3,3,8), w=None,name=None):
+    if not w: 
+        w = Convolution2D(nC, nT, nF, border_mode='same')
+    x = w(x)
     x = BatchNormalization()(x)
     x = Activation('relu')(x)
     if mode=='encoder':
@@ -91,38 +96,48 @@ def layer_twist(x, mode='encoder', (nX, nT, nF, nC)=(2,3,3,8),name=None):
         x = MaxPooling2D((1, nX), border_mode='same')(x)
         x = UpSampling2D((nX, 1))(x)
     x = Dropout(0.5, name = name)(x)
-    return x 
+    return x, w
 
 def layer_posterior(x, nP, nE):
     nB, nT, nF, nC = K.int_shape(x)
     x = Reshape((nT,nF*nC))(x)
     p = TimeDistributed(Dense(nP, activation='softmax'), name = 'posterior')(x)   
-    e = TimeDistributed(Dense(nE, activation='relu'), name = 'embedding')(p)   
+    e = TimeDistributed(Dense(nE, activation='tanh'), name = 'embedding')(p)   
     return p, e
 
 def layer_reverse(e, x):
     nB, nT, nF, nC = K.int_shape(x)
-    x = TimeDistributed(Dense(nF*nC, activation='relu'))(e)
+    x = TimeDistributed(Dense(nF*nC, activation='tanh'))(e)
     x = Reshape((nT, nF, nC))(x)
     return x 
+
+def layer_rename(x, name = None):
+    nB, nT, nF, nC = K.int_shape(x)
+    x = Reshape((nT, nF, nC),name=name)(x)
+    return x
 ################################################################################
 input_img = Input(shape=(28*n_seq, 28, 1), name='input')
 
 x = input_img
-x = layer_twist(x, 'encoder', (2,3,3,8))
-x = layer_twist(x, 'encoder', (2,3,3,8))
-p, e = layer_posterior(x, n_post, 20)
+w = Convolution2D(1, 3, 3, activation='sigmoid', border_mode='same')
 
+x, _ = layer_twist(x, 'encoder', (2,3,3,8))
+x, w0 = layer_twist(x, 'encoder', (2,3,3,8))
+x, w1 = layer_twist(x, 'encoder', (1,3,3,8))
+x, _ = layer_twist(x, 'encoder', (1,3,3,8), w1)
+
+p, e = layer_posterior(x, n_post, 20)
 err_trans = error_trans(p, e)
 err_sharp = error_sharp(p)
-
 x = layer_reverse(e, x)
-x = layer_twist(x, 'decoder', (2,3,3,8))
-#x = layer_twist(x, 'decoder', (2,3,3,1), 'reconstructed')
-x = layer_twist(x, 'decoder', (2,3,3,8))
 
-#decoded = x
-decoded = Convolution2D(1, 3, 3, activation='sigmoid', border_mode='same', name = 'reconstructed')(x)
+x, _ = layer_twist(x, 'decoder', (1,3,3,8), w1)
+x, _ = layer_twist(x, 'decoder', (1,3,3,8), w1)
+x, _ = layer_twist(x, 'decoder', (2,3,3,8), w0)
+x, _ = layer_twist(x, 'decoder', (2,3,3,8))
+x = w(x)
+
+decoded = layer_rename(x, 'reconstructed')
 err_recon = error_recon(input_img, decoded)
 err_final = error_final([err_trans, err_sharp, err_recon])
 
