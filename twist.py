@@ -191,6 +191,7 @@ tokenizer.save('tokenizer.h5')
 #####################################################
 tokenizer = load_model('tokenizer.h5', custom_objects = {'Context':Context,'dummy_objective':dummy_objective})
 ####################################################
+import matplotlib.pyplot as plt
 
 input_img = tokenizer.get_layer("input").input
 autoencoder = Model(input_img, tokenizer.get_layer("reconstructed").output)
@@ -198,8 +199,6 @@ posterior = Model(input_img, tokenizer.get_layer("posterior").output)
 recon_err = Model(input_img, tokenizer.get_layer("err_recon").output)
 trans_err = Model(input_img, tokenizer.get_layer("err_trans").output)
 
-
-import matplotlib.pyplot as plt
 decoded_imgs = autoencoder.predict(x_test)
 
 n = 10
