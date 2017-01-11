@@ -59,17 +59,16 @@ def shape_final(input_shapes):
     assert len(input_shapes)==2
     return input_shapes[0][0], 1
 
-
 class Example(Layer):
-    def __init__(self, [INSERT ARGS HERE], **kwargs): 
+    def __init__(self, _INSERT_ARGS_HERE_, **kwargs): 
         #define your own arguments, end with
         self.ARG1 = ARG1
         self.ARG2 = ARG2
-        super(Context, self).__init__(**kwargs)
+        super(type(self), self).__init__(**kwargs)
 
     def build(self, input_shape): 
         #define the layer parameters, end with
-        super(Context, self).build(input_shape)
+        super(type(self), self).build(input_shape)
 
     def call(self, input_tensor_list, mask=None):
         #calculations happen here, input and output can be lists
@@ -86,52 +85,91 @@ class Example(Layer):
     def get_config(self): 
         #add all parameters used in init to config
         config = {'ARG1': self.ARG1, 'ARG2':self.ARG2}
-        base_config = super(Context, self).get_config()
+        base_config = super(type(self), self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+
+'''
+x = Reshape((7*n_seq, 28*4*8))(x)
+p = TimeDistributed(Dense(n_post, activation='softmax'), name = 'posterior')(x)
+c = Context(n_context)(p)
+c = TimeDistributed(Dense(n_post, activation = 'softmax'), name = 'predicted')(c)
+err_trans = merge([p,c], mode=obj_trans, output_shape =  shape_final, name = 'err_trans')
+x = TimeDistributed(Dense(28*4*8, activation='tanh'))(p)
+x = Reshape((7*n_seq, 28*4, 8))(x)
+'''
+
+class Twist(Layer):
+    def __init__(self, twist, filt_shape, **kwargs): 
+        self.filt_shape = filt_shape
+        self.twist = twist
+        print 'twist',twist
+        print 'filt_shape', filt_shape
+        # twist (time, feat),
+        # 0 means compress, >0 means expand
+        # (-2, 2) means compress in time by 2, expand in feat by 2 
+        self.time_twist = self._to_twist(twist[0])
+        self.feat_twist = self._to_twist(twist[1])
+        super(type(self), self).__init__(**kwargs)
+
+    def _to_twist(self, twist):
+        if twist >=0: return (1, int(twist))
+        else: return (int(-twist), 1)
+    
+    def _to_shape(self, dim, twist):
+        if twist > 0: return dim*twist
+        else: return int(np.ceil(np.float(dim)/-twist))
+
+    def build(self, input_shape): 
+        super(type(self), self).build(input_shape)
+
+    def call(self, x, mask=None):
+        x = Convolution2D(self.filt_shape[2], self.filt_shape[0], self.filt_shape[1], border_mode='same')(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
+        x = MaxPooling2D((self.time_twist[0], self.feat_twist[0]), border_mode='same')(x)
+        x = UpSampling2D((self.time_twist[1], self.feat_twist[1]))(x)
+        x = Dropout(0.5)(x)
+        return x
+
+    def get_output_shape_for(self, input_shape):
+        # use tensorflow convention
+        nB, nT, nF, nC = input_shape 
+        return nB, self._to_shape(nT, self.twist[0]), self._to_shape(nF, self.twist[1]), self.filt_shape[2]
+
+    def get_config(self): 
+        config = {'twist': self.twist, 'filt_shape':self.filt_shape}
+        base_config = super(type(self), self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
 class Warp(Layer):
-    def __init__(self, doc_len, qer_len, **kwargs): 
-        #define your own arguments, end with
-        self.ARG1 = ARG1
-        self.ARG2 = ARG2
-        super(Context, self).__init__(**kwargs)
+    def __init__(self,  **kwargs): 
+        super(type(self), self).__init__(**kwargs)
 
     def build(self, input_shape): 
-        #define the layer parameters, end with
-        super(Context, self).build(input_shape)
+        super(type(self), self).build(input_shape)
 
     def call(self, input_tensor_list, mask=None):
-        pD, pQ = input_tensor_list
-        
-        qer = tf.placeholder(tf.float32, (100,3,2))
-        doc = tf.placeholder(tf.float32, (100,6,2))
-    
-        dist = warp_dtw(qer, doc)
-        
-        
-        
-        return output_tensor_list
+        qer, doc = input_tensor_list
+        return warp_dtw(qer, doc) 
 
-    def get_output_shape_for(self, input_shape): 
-        #same as Lambda layer output size function
-        #input and output includes batch size
-        n_batch, dim[0], dim[1], dim[2] = input_shape
-        return n_batch, dim[0], dim[1], dim[2]
+    def get_output_shape_for(self, input_shapes): 
+        qer_shape, doc_shape = input_shapes
+        #size of batch
+        return qer_shape[0]
 
     def get_config(self): 
-        #add all parameters used in init to config
-        config = {'ARG1': self.ARG1, 'ARG2':self.ARG2}
-        base_config = super(Context, self).get_config()
+        base_config = super(type(self), self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
 
 class Context(Layer):
     def __init__(self, n_win, **kwargs):
         self.n_win = n_win
-        super(Context, self).__init__(**kwargs)
+        super(type(self), self).__init__(**kwargs)
 
     def build(self, input_shape):
-        super(Context, self).build(input_shape)
+        super(type(self), self).build(input_shape)
 
     def call(self, x, mask=None):
         return self._context(x, self.n_win)
@@ -141,7 +179,7 @@ class Context(Layer):
     
     def get_config(self):
         config = {'n_win': self.n_win}
-        base_config = super(Context, self).get_config()
+        base_config = super(type(self), self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
     
     def _pad_zero(self, x, n_left=0, n_right=0):
