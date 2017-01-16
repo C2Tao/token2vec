@@ -37,7 +37,7 @@ def dummy_shape(input_shapes):
 def obj_trans(inputs):
     from keras.objectives import categorical_crossentropy, binary_crossentropy
     y_answ, y_pred = inputs
-    return K.mean(categorical_crossentropy(y_answ, y_pred), axis=-1)*0.001
+    return K.mean(categorical_crossentropy(y_answ, y_pred), axis=-1)*0.000
 
 def obj_sharp(inputs):
     y_dist, _ = inputs
