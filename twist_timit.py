@@ -4,20 +4,27 @@ from keras.models import load_model
 from keras import backend as K
 from keras.regularizers import l1
 from keras_layers import Context, Twist
+from keras.callbacks import EarlyStopping, ModelCheckpoint
 import numpy as np
 # theano weight indexing: (n_input), n_row, n_col, n_output
 # theano tensor indexing: (n_batch), n_row, n_col, n_channel
 # my order n_batch, n_time, n_feat_sub, n_feat 
-n_post = 100
-n_embed = n_post
-n_context = 1
-n_batch = 20
-n_epoch = 100
-n_size = 5
-n_chan = 32
+n_tw = 3 
+n_chan = 16
+n_filtsize = 3
+n_post = 50
+n_embed = 20 
+n_context = 2
+ACT = 'relu'
+MASK = True
+
+
+n_batch = 16
+n_epoch = 1
+TRAIN = True
 ew_trans, ew_sharp, ew_recon = 0.1, 1, 10
-TRAIN=True
-#TRAIN=False
+
+model_name = 'tw{}_chan{}_filt{}_po{}_em{}_cxt{}_{}_mask{}'.format(n_tw,n_chan,n_filtsize, n_post, n_embed, n_context, ACT, int(MASK))
 ew = np.array([ew_trans, ew_sharp, ew_recon])
 ################################################################################
 '''
@@ -33,9 +40,18 @@ x_train = np.reshape(x_train, (len(x_train)/n_seq, n_seq*28, 28, 1))
 x_test = np.reshape(x_test, (len(x_test)/n_seq, n_seq*28, 28, 1))
 '''
 import timit_parse
-x_train_feat, x_train_mask = timit_parse.feat_load('feature/mini_document.pkl')
+#x_train_feat, x_train_mask = timit_parse.feat_load('feature/mini_document.pkl')
+x_train_feat, x_train_mask = timit_parse.feat_load('feature/train_document.pkl')
 x_train = np.array(x_train_feat)[:,:,:, np.newaxis]  
 mask_train = np.array(x_train_mask)
+
+x_test_feat, x_test_mask = timit_parse.feat_load('feature/test_document.pkl')
+x_test = np.array(x_test_feat)[:,:,:, np.newaxis]  
+mask_test = np.array(x_test_mask)
+
+if not MASK:
+    mask_train = np.ones_like(mask_train, dtype = np.float32)
+    mask_test = np.ones_like(mask_test, dtype = np.float32)
 ################################################################################
 def dummy_objective(dummy_target, obj):
     return obj
@@ -47,6 +63,9 @@ def dummy_shape(input_shapes):
     #print input_shapes
     #assert len(input_shapes)==2
     return input_shapes[0][0], 1
+
+def dummy_input(x, ew, mask):
+    return [x, np.tile(ew, (len(x), 1)), mask]
 ################################################################################
 def obj_trans(inputs):
     from keras.objectives import categorical_crossentropy, binary_crossentropy
@@ -63,8 +82,8 @@ def obj_sharp(inputs):
 
 def obj_recon(inputs):
     y_answ, y_pred, mask = inputs
-    #return K.mean(K.mean(K.mean(K.square(y_answ - y_pred), axis=-1), axis=-1),axis=-1)#*ew_recon
     return K.mean(mask * K.mean(K.mean(K.square(y_answ - y_pred), axis=-1), axis=-1),axis=-1)
+    #return K.mean(K.mean(K.mean(K.square(y_answ - y_pred), axis=-1), axis=-1),axis=-1)
 
 def obj_final(inputs):
     errs = K.transpose(K.stack(inputs[:-1]))
@@ -94,7 +113,7 @@ def error_sharp(p):
     return err
 
 def error_trans(p, e):
-    e = Context(n_context)(p)
+    e = Context(n_context)(e)
     c = TimeDistributed(Dense(n_post, activation = 'softmax'), name = 'predicted')(e)
     err = merge([p,c], mode=obj_trans, output_shape =  dummy_shape, name = 'err_trans')
     #e = Context(n_context)(e)
@@ -102,14 +121,12 @@ def error_trans(p, e):
     #err = merge([p,c], mode=obj_trans, output_shape =  dummy_shape, name = 'err_trans')
     return err
 
-def layer_twist(x, mode='encoder', (cT, cF) = (2, 2), (nT, nF, nC)=(n_size,n_size,n_chan), w=None,name=None):
+def layer_twist(x, mode='encoder', (cT, cF) = (2, 2), nC = n_chan, act=ACT,(nT, nF)=(n_filtsize,n_filtsize), w=None,name=None):
     if not w: 
         w = Convolution2D(nC, nT, nF, border_mode='same')
     x = w(x)
     x = BatchNormalization()(x)
-    #x = Activation('linear')(x)
-    x = Activation('tanh')(x)
-    #x = Activation('relu')(x)
+    x = Activation(act)(x)
     if mode=='encoder':
         x = MaxPooling2D((cT, 1), border_mode='same')(x)
         x = UpSampling2D((1, cF))(x)
@@ -142,20 +159,19 @@ mask = Input(shape=(512, ), name = 'mask')
 err_weight = Input(shape=(len(ew),),name='error_weight')
 x = input_feat
 
-x, _ = layer_twist(x, 'encoder', (4, 1))
-x, _ = layer_twist(x, 'encoder', (2, 2))
-x, _ = layer_twist(x, 'encoder', (2, 2))
+
+for i in range(n_tw):
+    x, _ = layer_twist(x, 'encoder', (2, 2), n_chan)
 
 p, e = layer_posterior(x, n_post, n_embed)
 err_trans = error_trans(p, e)
 err_sharp = error_sharp(p)
 x = layer_reverse(e, x)
 
-x, _ = layer_twist(x, 'decoder', (2, 2))
-x, _ = layer_twist(x, 'decoder', (2, 2))
-x, _ = layer_twist(x, 'decoder', (4, 1))
+for i in range(n_tw):
+    x, _ = layer_twist(x, 'decoder', (2, 2), n_chan)
 
-x = Convolution2D(1, n_size, n_size, activation='linear', border_mode='same')(x)
+x = Convolution2D(1, n_filtsize, n_filtsize, activation='linear', border_mode='same')(x)
 
 decoded = layer_rename(x, 'reconstructed')
 
@@ -166,20 +182,23 @@ tokenizer = Model([input_feat, err_weight, mask], err_final)
 tokenizer.compile(optimizer='adam', loss=dummy_objective)
 
 
-def dummy_input(x, ew, mask):
-    return [x, np.tile(ew, (len(x), 1)), mask]
+checkpoint = ModelCheckpoint(filepath='model/'+model_name+'.h5', monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False, mode='auto', period=1)
+earlystop = EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=1, mode='auto')
+
     #return [x, ew]
 ################################################################################
+
+
 if TRAIN:
     tokenizer.fit(dummy_input(x_train, ew, mask_train), dummy_target(x_train),
                     nb_epoch=n_epoch,
                     batch_size=n_batch,
                     shuffle=True,
-                    validation_data=(dummy_input(x_train, ew, mask_train), dummy_target(x_train)),
-                    callbacks=[])
-    tokenizer.save('model/timit_mini.h5')
+                    validation_data=(dummy_input(x_test, ew, mask_test), dummy_target(x_test)),
+                    callbacks=[earlystop, checkpoint])
+    #tokenizer.save(model_name)
 else:
-    tokenizer = load_model('model/timit_mini.h5', custom_objects = {'Context':Context,'dummy_objective':dummy_objective,'Twist':Twist})
+    tokenizer = load_model('model/'+model_name+'.h5', custom_objects = {'Context':Context,'dummy_objective':dummy_objective,'Twist':Twist})
 ####################################################
 import matplotlib.pyplot as plt
 
@@ -189,27 +208,33 @@ autoencoder = Model(input_feat, tokenizer.get_layer("reconstructed").output)
 posterior = Model(input_feat, tokenizer.get_layer("posterior").output)
 recon_err = Model([input_feat, mask], tokenizer.get_layer("err_recon").output)
 trans_err = Model(input_feat, tokenizer.get_layer("err_trans").output)
-decoded_imgs = autoencoder.predict(x_train)
+x = x_test[0:1,:,:,:]
+
+decoded_imgs = autoencoder.predict(x)
 
 #plt.figure(figsize=(20, 4))
 
 ax = plt.subplot(2, 1, 1)
-plt.imshow(x_train[0].reshape(512, 32).T)
+plt.imshow(x.reshape(512, 32).T)
 plt.gray()
 ax.get_xaxis().set_visible(False)
 ax.get_yaxis().set_visible(False)
 
 ax = plt.subplot(2, 1, 2)
-plt.imshow(decoded_imgs[0].reshape(512, 32).T)
+plt.imshow(decoded_imgs.reshape(512, 32).T)
 plt.gray()
 ax.get_xaxis().set_visible(False)
 ax.get_yaxis().set_visible(False)
 
-plt.show()
+plt.savefig('figure/'+model_name+'_fbank.png')
+#plt.show()
 #####################################################3
-plt.matshow(posterior.predict(x_train)[:1].reshape(-1,n_post).T)
-plt.show()
 
-rer = recon_err.predict([x_train,mask_train])
-ter = trans_err.predict(x_train)
-print rer, ter
+plt.matshow(posterior.predict(x).reshape(-1,n_post).T)
+
+plt.savefig('figure/'+model_name+'_post.png')
+#plt.show()
+
+#rer = recon_err.predict([x_test,mask_test])
+#ter = trans_err.predict(x_test)
+#print rer, ter
