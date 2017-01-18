@@ -221,12 +221,15 @@ if __name__=='__main__':
     #print list_word(test_document[0])
     #print feat_view(feat_extract(test_document[0]))
 
-    #u, v = feat_norm(train_query)
-    #feat_save(train_query, 'feature/train_query.pkl', (u, v), None)
-    #feat_save(test_query, 'feature/test_query.pkl', (u, v), None) 
+    u, v = feat_norm(train_document)
     #feat_save(train_document, 'feature/train_document.pkl', (u, v), 512)
     #feat_save(test_document, 'feature/test_document.pkl', (u, v), 512)
-    #feat_save(train_document[:100], 'feature/mini_document.pkl', (u,v), 512)
+    #feat_save(train_document[:100], 'feature/mini_document.pkl', (u,v), 64)
+    
+    #feat_save(train_query, 'feature/train_query.pkl', (u, v), 32)
+    #feat_save(test_query, 'feature/test_query.pkl', (u, v), 32) 
+    ###feat_save(train_query, 'feature/train_query.pkl', (u, v), None)
+    ###feat_save(test_query, 'feature/test_query.pkl', (u, v), None) 
     
     
 
