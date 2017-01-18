@@ -207,11 +207,10 @@ def feat_load(pickle_file):
 
  
 if __name__=='__main__':
-    '''
-    timit_list = get_timit_list()
-    for wav in timit_list: 
-        timit_sox(wav, word_root) 
-    '''
+    #timit_list = get_timit_list()
+    #for wav in timit_list: 
+    #    timit_sox(wav, word_root) 
+
     train_query = sorted(timit_filter(['dr8','train','_sx'], word_root))
     test_query = sorted(timit_filter(['dr8','test','_sx'], word_root))
     train_document = sorted(timit_filter(['train','_sx'], wav_root) - timit_filter(['train','_sx','dr8'], wav_root))
@@ -219,16 +218,15 @@ if __name__=='__main__':
      
     train_query = query_filter(train_query, train_document, (20,1000), (3,999), (20,999))
     test_query  = query_filter(test_query, test_document, (20,1000), (3,999), (20,999))
+    #print list_word(test_document[0])
+    #print feat_view(feat_extract(test_document[0]))
 
-    u, v = feat_norm(train_query)
-    #feats, masks =  feat_pack(wav_list, (u,v), 30)
-    #feat_view(feats[0])
-    
+    #u, v = feat_norm(train_query)
     #feat_save(train_query, 'feature/train_query.pkl', (u, v), None)
     #feat_save(test_query, 'feature/test_query.pkl', (u, v), None) 
     #feat_save(train_document, 'feature/train_document.pkl', (u, v), 512)
     #feat_save(test_document, 'feature/test_document.pkl', (u, v), 512)
-    feat_save(train_document[:100], 'feature/mini_document.pkl', (u,v), 512)
+    #feat_save(train_document[:100], 'feature/mini_document.pkl', (u,v), 512)
     
     
 

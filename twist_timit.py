@@ -9,22 +9,22 @@ import numpy as np
 # theano weight indexing: (n_input), n_row, n_col, n_output
 # theano tensor indexing: (n_batch), n_row, n_col, n_channel
 # my order n_batch, n_time, n_feat_sub, n_feat 
-n_tw = 5
+n_tw = 4
 n_chan = 16
 n_filtsize = 3
 n_post = 32
-n_embed = 16
+n_embed = 64
 n_context = 2
 ACT = 'tanh'
 MASK = True
 n_batch = 16
 drop = 0.5
 
-n_epoch = 10
+n_epoch = 1000
 TRAIN = True
 #TRAIN = False
-ew_trans, ew_sharp, ew_recon = 9, 0, 0
-patience = 10000
+ew_trans, ew_sharp, ew_recon = 2, 2, 0
+patience = 5
 sam_id = 0
 model_name = 'tw{}_chan{}_filt{}_po{}_em{}_cxt{}_{}_mask{}_batch{}_drop{}_err{}_ep{}_p{}'.format(n_tw,n_chan,n_filtsize, n_post, n_embed, n_context, ACT, int(MASK), n_batch, drop, ''.join(map(str, [ew_trans, ew_sharp, ew_recon])), n_epoch, patience)
 ew = np.array([10**(-ew_trans), 10**(-ew_sharp), 10**(-ew_recon)])
