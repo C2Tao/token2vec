@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 # theano weight indexing: (n_input), n_row, n_col, n_output
 # theano tensor indexing: (n_batch), n_row, n_col, n_channel
 # my order n_batch, n_time, n_feat_sub, n_feat 
-n_tw = 2
+n_tw = 3
 #n_chan = 16
 n_filtsize = 3
 n_post = 128
@@ -19,10 +19,10 @@ n_embed = 64
 n_context = 2
 ACT = 'tanh'
 MASK = True
-n_batch = 8
+n_batch = 128
 drop = 0.5
 
-n_epoch = 1
+n_epoch = 1000
 TRAIN = True
 #TRAIN = False
 #ew_trans, ew_sharp, ew_recon = 9, 1, 0
@@ -53,6 +53,7 @@ mask_train = np.array(x_train_mask)#[:,:,np.newaxis]
 x_test_feat, x_test_mask = timit_parse.feat_load('feature/test_query.pkl')
 x_test = np.array(x_test_feat)[:,:,:, np.newaxis]  
 mask_test = np.array(x_test_mask)#[:,:,np.newaxis]
+
 
 if not MASK:
     mask_train = np.ones_like(mask_train, dtype = np.float32)

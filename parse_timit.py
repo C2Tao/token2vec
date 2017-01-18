@@ -84,7 +84,10 @@ def timit_sox(name, folder, dot='wrd'):
     for i, tag in enumerate(tag_list):
         out_wav = os.path.join(folder, '_'.join([name, tag])+'.wav')
         in_wav  = os.path.join(wav_root, name+'.wav')
-        sts = subprocess.Popen("sox {} {} trim {} {}".format(in_wav, out_wav, int_list[i], int_list[i+1]-int_list[i]), shell=True).wait()
+        p = subprocess.Popen("sox {} {} trim {} {}".format(in_wav, out_wav, int_list[i], int_list[i+1]-int_list[i]), shell=True,stdout=subprocess.PIPE)
+        output = p.communicate()[0]
+        if p.returncode!=0:
+            print name
 
 def timit_splice_word(path):
     timit_list = get_timit_list()
@@ -147,13 +150,14 @@ def feat_name(name):
 def feat_extract(wav, nfilt=32):
     from python_speech_features import mfcc, logfbank
     from scipy.io import wavfile
-    #try:
     if wav[-3:] !='wav': wav = feat_name(wav)
-    (rate,sig) = wavfile.read(wav)
-    fbank_feat = logfbank(sig,rate, nfilt=nfilt)
-    #except:
-    #    print wav
-    return fbank_feat
+    try:
+        (rate,sig) = wavfile.read(wav)
+        fbank_feat = logfbank(sig,rate, nfilt=nfilt)
+        return fbank_feat
+    except:
+        print 'removing', wav
+        os.system('rm ' + wav)
 
 def feat_view(feat):
     import matplotlib.pyplot as plt
@@ -210,26 +214,27 @@ if __name__=='__main__':
     #timit_list = get_timit_list()
     #for wav in timit_list: 
     #    timit_sox(wav, word_root) 
-
+    '''
     train_query = sorted(timit_filter(['dr8','train','_sx'], word_root))
     test_query = sorted(timit_filter(['dr8','test','_sx'], word_root))
     train_document = sorted(timit_filter(['train','_sx'], wav_root) - timit_filter(['train','_sx','dr8'], wav_root))
     test_document = sorted(timit_filter(['test','_sx'], wav_root) - timit_filter(['test','_sx','dr8'], wav_root))
-     
     train_query = query_filter(train_query, train_document, (20,1000), (3,999), (20,999))
     test_query  = query_filter(test_query, test_document, (20,1000), (3,999), (20,999))
-    #print list_word(test_document[0])
-    #print feat_view(feat_extract(test_document[0]))
-
     u, v = feat_norm(train_document)
-    #feat_save(train_document, 'feature/train_document.pkl', (u, v), 512)
-    #feat_save(test_document, 'feature/test_document.pkl', (u, v), 512)
-    #feat_save(train_document[:100], 'feature/mini_document.pkl', (u,v), 64)
-    
-    #feat_save(train_query, 'feature/train_query.pkl', (u, v), 32)
-    #feat_save(test_query, 'feature/test_query.pkl', (u, v), 32) 
-    ###feat_save(train_query, 'feature/train_query.pkl', (u, v), None)
-    ###feat_save(test_query, 'feature/test_query.pkl', (u, v), None) 
+    feat_save(train_document, 'feature/train_document.pkl', (u, v), 512)
+    feat_save(test_document, 'feature/test_document.pkl', (u, v), 512)
+    feat_save(train_query, 'feature/train_query.pkl', (u, v), None)
+    feat_save(test_query, 'feature/test_query.pkl', (u, v), None) 
+    print list_word(test_document[0])
+    print feat_view(feat_extract(test_document[0]))
+    '''
+    train_query = sorted(timit_filter(['train'], word_root))
+    test_query = sorted(timit_filter(['test'], word_root))
+    #for q in train_query+test_query:  feat_extract(q)
+    u, v = feat_norm(train_query)
+    feat_save(train_query, 'feature/train_query.pkl', (u, v), 32)
+    feat_save(test_query, 'feature/test_query.pkl', (u, v), 32) 
     
     
 
