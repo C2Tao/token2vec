@@ -1,4 +1,4 @@
-from keras.layers import merge, Reshape, TimeDistributed, Lambda, Cropping1D, Input, Dense, Convolution2D, MaxPooling2D, UpSampling2D, Layer, BatchNormalization, Dropout, Flatten, Activation, MaxPooling1D, UpSampling1D
+from keras.layers import merge, Reshape, TimeDistributed, Lambda, Cropping1D, Input, Dense, Convolution2D, MaxPooling2D, UpSampling2D, Layer, BatchNormalization, Dropout, Flatten, Activation, MaxPooling1D, UpSampling1D, GaussianNoise
 from keras.models import Model
 from keras.models import load_model
 from keras import backend as K
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 # theano weight indexing: (n_input), n_row, n_col, n_output
 # theano tensor indexing: (n_batch), n_row, n_col, n_channel
 # my order n_batch, n_time, n_feat_sub, n_feat 
-n_tw = 3
+n_tw = 2
 #n_chan = 16
 n_filtsize = 3
 n_post = 128
@@ -22,9 +22,9 @@ MASK = True
 n_batch = 128
 drop = 0.5
 
-n_epoch = 1000
+n_epoch = 2
 TRAIN = True
-#TRAIN = False
+TRAIN = False
 #ew_trans, ew_sharp, ew_recon = 9, 1, 0
 ew_dtw, ew_recon = 0, 0
 patience = 5
@@ -137,26 +137,17 @@ def obj_dtw(inputs):
 
     def warp_ele(m_i, vecs):
         m_t, m_tm1, v_i = vecs
-        print 'm_t',m_t
-        print 'm_tm1',m_tm1
-        print 'm_i',m_i
-        print 'v_i',v_i
         m_ip1 = tf.reduce_min(tf.stack([m_t, m_tm1, m_i], axis=1), axis=1) 
-        print 'm_ip1',m_ip1
         return m_ip1 + v_i
 
     def warp_row(m_t, v_t):
         inf = tf.ones_like(m_t[0,:])*np.inf
         m_tm1 = tf.concat(0, [tf.expand_dims(inf, 0), m_t[:-1,:]])
-        print 'inf', inf
-        print 'm_tm1',m_tm1
-        print 'm_t',m_t
-        print 'v_t',v_t
         m_tp1 = tf.scan(warp_ele,(m_t, m_tm1, v_t), initializer=inf)
         #print 'm_tp1',m_tp1
         return m_tp1
 
-    def warp_dtw(x, y):
+    def warp_dtw_subseq(x, y):
         '''
         print x,'x'
         print y,'y'
@@ -178,8 +169,35 @@ def obj_dtw(inputs):
         #print 'finals',finals
         dist = tf.reduce_min(finals, axis = 0)
         return dist
+
+    def warp_dtw(x, y):
+        '''
+        print x,'x'
+        print y,'y'
+        D = squared_dist(x, y)
+        print D
+        warped = tf.scan(warp_row, D, initializer=tf.zeros(D.get_shape()[1]))
+        print warped
+        '''
+        D = squared_dist(x, y)
+        D = tf.transpose(D, perm=[1,2,0])
+        #d0,d1,d2 = D.get_shape()
+        #dy_zero = tf.zeros_like(D[0,:,:])
+
+        dy_inf = tf.ones_like(D[0,1:,:])*np.inf
+        dy_zero = tf.zeros_like(D[0,0:1,:])
+        dy_init = tf.concat(0, [dy_zero, dy_inf])
+
+        #print 'dy_zero',dy_zero
+
+        warped = tf.scan(warp_row, D, initializer=dy_init)
+        #warped = tf.transpose(warped, perm = [2,0,1])
+        finals = warped[-1,-1,:]
+        #print 'finals',finals
+        dist = finals#tf.reduce_min(finals, axis = 0)
+        return dist
     qer, doc = inputs
-    return warp_dtw(qer, doc) - warp_dtw(K.reverse(qer, axes = 1), doc)
+    return warp_dtw(qer, doc) #- warp_dtw(K.reverse(qer, axes = 1), doc)
 ################################################################################
 
 def error_final(err_list, err_weights):
@@ -256,9 +274,11 @@ input_query = Input(shape=(32, 32, 1), name = 'query')
 input_errweight = Input(shape=(len(ew),),name='error_weight')
 
 
+#autoencoder#
 input_holder = Input(shape=(32, 32, 1), name = 'input_holder')
 x = input_holder
 mask = input_mask
+x = GaussianNoise(1)(x)
 for i in range(n_tw):
     x, mask, _ = layer_twist(x, mask, 'encoder', (2, 2), 4**(i+1))
 hidden, e = layer_posterior(x, n_post, n_embed)
@@ -268,6 +288,7 @@ x = layer_reverse(e, x)
 for i in range(n_tw):
     x, mask, _ = layer_twist(x, mask, 'decoder', (2, 2), 4**(n_tw-i-1))
 decoded = Convolution2D(1, n_filtsize, n_filtsize, activation='linear', border_mode='same',name='reconstructed')(x)
+#''''''''''''#
 
 posterior = Model(input_holder, hidden, 'posterior')
 autoencoder = Model(input_holder, decoded, 'autoencoder')

@@ -50,7 +50,7 @@ def warp_row(m_t, v_t):
     #print 'm_tp1',m_tp1
     return m_tp1
 
-def warp_dtw(x, y):
+def warp_dtw_subseq(x, y):
     '''
     print x,'x'
     print y,'y'
@@ -73,6 +73,36 @@ def warp_dtw(x, y):
     dist = tf.reduce_min(finals, axis = 0)
     return dist
 
+def warp_dtw(x, y):
+    '''
+    print x,'x'
+    print y,'y'
+    D = squared_dist(x, y)
+    print D
+    warped = tf.scan(warp_row, D, initializer=tf.zeros(D.get_shape()[1]))
+    print warped
+    '''
+    D = squared_dist(x, y)
+    D = tf.transpose(D, perm=[1,2,0])
+    #d0,d1,d2 = D.get_shape()
+    #dy_zero = tf.zeros_like(D[0,:,:])
+
+    dy_inf = tf.ones_like(D[0,1:,:])*np.inf
+    dy_zero = tf.zeros_like(D[0,0:1,:])
+    dy_init = tf.concat(0, [dy_zero, dy_inf])
+    print dy_zero
+    print dy_init
+
+    #print 'dy_zero',dy_zero
+
+    warped = tf.scan(warp_row, D, initializer=dy_init)
+    #warped = tf.transpose(warped, perm = [2,0,1])
+    print 'warped',warped
+    finals = warped[-1,-1,:]
+    #print 'finals',finals
+    dist = finals#tf.reduce_min(finals, axis = 0)
+    return dist
+
 
 '''
 if __name__=='__main__':
@@ -88,7 +118,7 @@ if __name__=='__main__':
 '''
 if __name__=='__main__':
     nx = np.array([[2,2], [3,3], [4,4]], dtype=np.float32)
-    ny = np.array([[1,1], [2,2], [3,3], [4,4], [5,5], [6,6]], dtype=np.float32)
+    ny = np.array([[1,1],[1,1],[2,2], [3,3], [4,4],[5,5,]], dtype=np.float32)
     nx = np.tile(nx,[100,1,1])
     ny = np.tile(ny,[100,1,1])
     x = tf.placeholder(tf.float32, None)
@@ -96,5 +126,7 @@ if __name__=='__main__':
     #x = tf.placeholder(tf.float32, (100,3,2))
     #y = tf.placeholder(tf.float32, (100,6,2))
     
+    dist = warp_dtw_subseq(x, y)
+    print sess.run(dist, feed_dict = {x:nx, y:ny})
     dist = warp_dtw(x, y)
     print sess.run(dist, feed_dict = {x:nx, y:ny})
