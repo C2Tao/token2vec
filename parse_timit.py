@@ -105,11 +105,18 @@ def list_word(document):
     ___, words =  timit_parse(document, 'wrd')
     return words
 
+def is_document(document_list):
+    return len(document_list[0].split('_'))==4
+
 def find_answ(query_list, document_list):
     answ = np.zeros([len(query_list), len(document_list)])
     query_words = map(last_word, query_list)
-    document_words = map(list_word, document_list) 
+    if is_document(document_list):
+        document_words = map(list_word, document_list)
+    else:
+        document_words = map(last_word, document_list),
     for i, q in enumerate(query_words):
+        print i,'/', len(query_words)
         for j, d in enumerate(document_words):
             if q in d:
                 answ[i,j]=1.0
@@ -204,11 +211,22 @@ def feat_norm(wav_list):
 def feat_save(wav_list, pickle_file, (u, v)=(0.0, 1.0), nT = None):
     with open(pickle_file,'wb') as f:
         cPickle.dump(feat_pack(wav_list, (u, v), nT), f, protocol=-1)
-    
+
+def pick_save(obj, pickle_file):
+    with open(pickle_file,'wb') as f:
+        cPickle.dump(obj, f, protocol=-1)
+        
 def feat_load(pickle_file):
     with open(pickle_file,'rb') as f:
         return cPickle.load(f)
 
+def pair_generator(query_list):
+    query_words = map(last_word, query_list)
+    if is_document(document_list):
+        document_words = map(list_word, document_list)
+    else:
+        document_words = map(last_word, document_list),
+    
  
 if __name__=='__main__':
     #timit_list = get_timit_list()
@@ -229,9 +247,10 @@ if __name__=='__main__':
     print list_word(test_document[0])
     print feat_view(feat_extract(test_document[0]))
     '''
+    
     train_query = sorted(timit_filter(['train'], word_root))
     test_query = sorted(timit_filter(['test'], word_root))
-    #for q in train_query+test_query:  feat_extract(q)
+    #for q in train_query+test_query:  feat_extract(q) ##filter bad queries
     u, v = feat_norm(train_query)
     feat_save(train_query, 'feature/train_query.pkl', (u, v), 32)
     feat_save(test_query, 'feature/test_query.pkl', (u, v), 32) 

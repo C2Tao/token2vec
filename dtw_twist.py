@@ -7,11 +7,14 @@ from keras_layers import Context, Twist
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 import numpy as np
 #from tensorflow_dtw_batch import warp_dtw
+
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 # theano weight indexing: (n_input), n_row, n_col, n_output
 # theano tensor indexing: (n_batch), n_row, n_col, n_channel
 # my order n_batch, n_time, n_feat_sub, n_feat 
-n_tw = 2
+n_tw = 1
 #n_chan = 16
 n_filtsize = 3
 n_post = 128
@@ -22,7 +25,7 @@ MASK = True
 n_batch = 128
 drop = 0.5
 
-n_epoch = 2
+n_epoch =2
 TRAIN = True
 TRAIN = False
 #ew_trans, ew_sharp, ew_recon = 9, 1, 0
@@ -44,13 +47,13 @@ x_test = x_test.astype('float32') / 255.
 x_train = np.reshape(x_train, (len(x_train)/n_seq, n_seq*28, 28, 1))
 x_test = np.reshape(x_test, (len(x_test)/n_seq, n_seq*28, 28, 1))
 '''
-import timit_parse
-#x_train_feat, x_train_mask = timit_parse.feat_load('feature/mini_document.pkl')
-x_train_feat, x_train_mask = timit_parse.feat_load('feature/train_query.pkl')
+import parse_timit
+#x_train_feat, x_train_mask = parse_timit.feat_load('feature/mini_document.pkl')
+x_train_feat, x_train_mask = parse_timit.feat_load('feature/train_query.pkl')
 x_train = np.array(x_train_feat)[:,:,:, np.newaxis]  
 mask_train = np.array(x_train_mask)#[:,:,np.newaxis]
 
-x_test_feat, x_test_mask = timit_parse.feat_load('feature/test_query.pkl')
+x_test_feat, x_test_mask = parse_timit.feat_load('feature/test_query.pkl')
 x_test = np.array(x_test_feat)[:,:,:, np.newaxis]  
 mask_test = np.array(x_test_mask)#[:,:,np.newaxis]
 
